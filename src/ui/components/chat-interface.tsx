@@ -54,6 +54,7 @@ function ChatInterfaceWithAgent({
     commandSuggestions,
     availableModels,
     autoEditEnabled,
+    planModeEnabled,
   } = useInputHandler({
     agent,
     chatHistory,
@@ -308,7 +309,7 @@ function ChatInterfaceWithAgent({
               3. Create MINIMAX.md files to customize your interactions with MiniMax.
             </Text>
             <Text color="gray">
-              4. Press Shift+Tab to toggle auto-edit mode.
+              4. Press Shift+Tab to cycle through modes: manual → plan → auto → manual
             </Text>
             <Text color="gray">5. /help for more information.</Text>
           </Box>
@@ -359,8 +360,8 @@ function ChatInterfaceWithAgent({
           <Box flexDirection="row" marginTop={1}>
             <Box marginRight={2}>
               <Text color="cyan">
-                {autoEditEnabled ? "▶" : "⏸"} auto-edit:{" "}
-                {autoEditEnabled ? "on" : "off"}
+                {planModeEnabled ? "📋 plan" : autoEditEnabled ? "▶" : "⏸"} mode:{" "}
+                {planModeEnabled ? "plan" : autoEditEnabled ? "auto" : "manual"}
               </Text>
               <Text color="gray" dimColor>
                 {" "}

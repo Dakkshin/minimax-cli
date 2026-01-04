@@ -207,23 +207,51 @@ export function useInputHandler({
     return sessionFlags.allOperations;
   });
 
+  const [planModeEnabled, setPlanModeEnabled] = useState(() => {
+    const confirmationService = ConfirmationService.getInstance();
+    const sessionFlags = confirmationService.getSessionFlags();
+    return sessionFlags.planMode || false;
+  });
+
   const handleSpecialKey = (key: Key): boolean => {
     // Don't handle input if confirmation dialog is active
     if (isConfirmationActive) {
       return true; // Prevent default handling
     }
 
-    // Handle shift+tab to toggle auto-edit mode
+    // Handle shift+tab to cycle through modes: manual → plan → auto → manual
     if (key.shift && key.tab) {
-      const newAutoEditState = !autoEditEnabled;
-      setAutoEditEnabled(newAutoEditState);
-
       const confirmationService = ConfirmationService.getInstance();
-      if (newAutoEditState) {
-        // Enable auto-edit: set all operations to be accepted
+      const currentFlags = confirmationService.getSessionFlags();
+      
+      let newMode: "manual" | "plan" | "auto";
+      
+      if (currentFlags.planMode) {
+        // Currently in plan mode, switch to auto mode
+        newMode = "auto";
+      } else if (currentFlags.allOperations) {
+        // Currently in auto mode, switch to manual mode
+        newMode = "manual";
+      } else {
+        // Currently in manual mode, switch to plan mode
+        newMode = "plan";
+      }
+      
+      // Update states and confirmation service
+      if (newMode === "plan") {
+        setPlanModeEnabled(true);
+        setAutoEditEnabled(false);
+        confirmationService.setSessionFlag("planMode", true);
+        confirmationService.setSessionFlag("allOperations", false);
+      } else if (newMode === "auto") {
+        setPlanModeEnabled(false);
+        setAutoEditEnabled(true);
+        confirmationService.setSessionFlag("planMode", false);
         confirmationService.setSessionFlag("allOperations", true);
       } else {
-        // Disable auto-edit: reset session flags
+        // Manual mode
+        setPlanModeEnabled(false);
+        setAutoEditEnabled(false);
         confirmationService.resetSession();
       }
       return true; // Handled
@@ -997,5 +1025,6 @@ Respond with ONLY the commit message, no additional text.`;
     availableModels,
     agent,
     autoEditEnabled,
+    planModeEnabled,
   };
 }

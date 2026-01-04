@@ -59,6 +59,8 @@ export class ConfirmationService extends EventEmitter {
     },
     // Global override
     allOperations: false,
+    // Plan mode: show plans but require confirmation for execution
+    planMode: false,
   };
 
   static getInstance(): ConfirmationService {
@@ -276,6 +278,7 @@ export class ConfirmationService extends EventEmitter {
         critical: false,
       },
       allOperations: false,
+      planMode: false,
     };
   }
 
@@ -284,11 +287,12 @@ export class ConfirmationService extends EventEmitter {
       fileOperations: this.sessionPermissions.file.read || this.sessionPermissions.file.write,
       bashCommands: this.sessionPermissions.system.process,
       allOperations: this.sessionPermissions.allOperations,
+      planMode: this.sessionPermissions.planMode,
     };
   }
 
   setSessionFlag(
-    flagType: "fileOperations" | "bashCommands" | "allOperations",
+    flagType: "fileOperations" | "bashCommands" | "allOperations" | "planMode",
     value: boolean
   ) {
     if (flagType === "allOperations") {
@@ -298,6 +302,8 @@ export class ConfirmationService extends EventEmitter {
       this.sessionPermissions.file.write = value;
     } else if (flagType === "bashCommands") {
       this.sessionPermissions.system.process = value;
+    } else if (flagType === "planMode") {
+      this.sessionPermissions.planMode = value;
     }
   }
 }
