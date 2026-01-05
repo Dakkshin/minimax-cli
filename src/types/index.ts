@@ -1,3 +1,6 @@
+// 3-way toggle operation mode types
+export type OperationMode = 'manual' | 'plan' | 'auto';
+
 export interface ToolResult {
   success: boolean;
   output?: string;

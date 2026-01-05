@@ -1,6 +1,7 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import { EventEmitter } from "events";
+import { OperationMode } from "../types/index.js";
 
 const execAsync = promisify(exec);
 
@@ -20,12 +21,29 @@ export interface ConfirmationResult {
   feedback?: string;
 }
 
+// Interface for operations in plan mode
+export interface PlannedOperation {
+  id: string;
+  timestamp: Date;
+  operation: string;
+  filename: string;
+  content?: string;
+  operationType: 'file' | 'bash';
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  // Executor function - will be called when plan is approved
+  executor?: () => Promise<ConfirmationResult>;
+}
+
 export class ConfirmationService extends EventEmitter {
   private static instance: ConfirmationService;
   private skipConfirmationThisSession = false;
   private pendingConfirmation: Promise<ConfirmationResult> | null = null;
   private resolveConfirmation: ((result: ConfirmationResult) => void) | null =
     null;
+
+  // Plan mode: pending operations to be executed after approval
+  private pendingPlan: PlannedOperation[] = [];
+  private planExecutionCallbacks: Map<string, () => Promise<ConfirmationResult>> = new Map();
 
   // Granular session permissions by category and risk level
   private sessionPermissions = {
@@ -305,5 +323,216 @@ export class ConfirmationService extends EventEmitter {
     } else if (flagType === "planMode") {
       this.sessionPermissions.planMode = value;
     }
+  }
+
+  // ============ Mode Helper Methods ============
+
+  /**
+   * Get the current operation mode based on session flags
+   * Priority: planMode > allOperations > manual
+   */
+  getCurrentMode(): OperationMode {
+    if (this.sessionPermissions.planMode) {
+      return 'plan';
+    }
+    if (this.sessionPermissions.allOperations) {
+      return 'auto';
+    }
+    return 'manual';
+  }
+
+  /**
+   * Set the operation mode
+   * This properly configures both planMode and allOperations flags
+   */
+  setMode(mode: OperationMode): void {
+    switch (mode) {
+      case 'manual':
+        this.sessionPermissions.planMode = false;
+        this.sessionPermissions.allOperations = false;
+        break;
+      case 'plan':
+        this.sessionPermissions.planMode = true;
+        this.sessionPermissions.allOperations = false;
+        break;
+      case 'auto':
+        this.sessionPermissions.planMode = false;
+        this.sessionPermissions.allOperations = true;
+        break;
+    }
+    // Emit event to notify listeners of mode change
+    this.emit('mode-changed', mode);
+  }
+
+  /**
+   * Cycle to the next mode: manual → plan → auto → manual
+   */
+  cycleMode(): OperationMode {
+    const currentMode = this.getCurrentMode();
+    let nextMode: OperationMode;
+
+    switch (currentMode) {
+      case 'manual':
+        nextMode = 'plan';
+        break;
+      case 'plan':
+        nextMode = 'auto';
+        break;
+      case 'auto':
+        nextMode = 'manual';
+        break;
+    }
+
+    this.setMode(nextMode);
+    return nextMode;
+  }
+
+  // ============ Plan Mode Methods ============
+
+  /**
+   * Check if the service is currently in plan mode
+   */
+  isInPlanMode(): boolean {
+    return this.sessionPermissions.planMode;
+  }
+
+  /**
+   * Check if plan mode is active and has pending operations
+   */
+  isCollectingPlan(): boolean {
+    return this.sessionPermissions.planMode && this.pendingPlan.length > 0;
+  }
+
+  /**
+   * Check if the pending plan is empty
+   */
+  isPlanEmpty(): boolean {
+    return this.pendingPlan.length === 0;
+  }
+
+  /**
+   * Get all pending operations in the plan
+   */
+  getPlan(): PlannedOperation[] {
+    return [...this.pendingPlan]; // Return a copy to prevent mutation
+  }
+
+  /**
+   * Get the count of pending operations
+   */
+  getPlanLength(): number {
+    return this.pendingPlan.length;
+  }
+
+  /**
+   * Add an operation to the pending plan
+   * Returns false if not in plan mode, true if added successfully
+   */
+  addToPlan(
+    operation: string,
+    filename: string,
+    operationType: 'file' | 'bash',
+    riskLevel: 'low' | 'medium' | 'high' | 'critical',
+    content?: string,
+    executor?: () => Promise<ConfirmationResult>
+  ): boolean {
+    // Only add to plan if we're actually in plan mode
+    if (!this.sessionPermissions.planMode) {
+      return false;
+    }
+
+    const id = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newOperation: PlannedOperation = {
+      id,
+      timestamp: new Date(),
+      operation,
+      filename,
+      operationType,
+      riskLevel,
+      content,
+      executor,
+    };
+
+    this.pendingPlan.push(newOperation);
+
+    // Store the executor callback if provided
+    if (executor) {
+      this.planExecutionCallbacks.set(id, executor);
+    }
+
+    // Emit event to notify UI that plan has been updated
+    this.emit("plan-updated", this.pendingPlan);
+
+    return true;
+  }
+
+  /**
+   * Clear the pending plan without executing
+   */
+  clearPlan(): void {
+    this.pendingPlan = [];
+    this.planExecutionCallbacks.clear();
+    this.emit("plan-cleared");
+  }
+
+  /**
+   * Execute all pending operations in the plan
+   * Returns array of results
+   */
+  async executePlan(): Promise<ConfirmationResult[]> {
+    const results: ConfirmationResult[] = [];
+    const operations = [...this.pendingPlan]; // Copy to avoid mutation during iteration
+
+    for (const op of operations) {
+      const executor = this.planExecutionCallbacks.get(op.id);
+      if (executor) {
+        try {
+          const result = await executor();
+          results.push(result);
+        } catch (error: any) {
+          results.push({
+            confirmed: false,
+            feedback: `Execution failed: ${error.message}`,
+          });
+        }
+      } else {
+        // No executor registered - this shouldn't happen
+        results.push({
+          confirmed: false,
+          feedback: "No executor registered for operation",
+        });
+      }
+
+      // Remove from pending plan as we execute
+      const index = this.pendingPlan.findIndex((p) => p.id === op.id);
+      if (index !== -1) {
+        this.pendingPlan.splice(index, 1);
+      }
+      this.planExecutionCallbacks.delete(op.id);
+    }
+
+    // Emit event that plan has been executed
+    this.emit("plan-executed", results);
+
+    return results;
+  }
+
+  /**
+   * Get a summary of the plan for display
+   */
+  getPlanSummary(): { total: number; byType: { file: number; bash: number }; byRisk: Record<string, number> } {
+    const byType = { file: 0, bash: 0 };
+    const byRisk: Record<string, number> = { low: 0, medium: 0, high: 0, critical: 0 };
+
+    for (const op of this.pendingPlan) {
+      byType[op.operationType]++;
+      byRisk[op.riskLevel]++;
+    }
+
+    return {
+      total: this.pendingPlan.length,
+      byType,
+      byRisk,
+    };
   }
 }

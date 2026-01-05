@@ -24,6 +24,7 @@ import { SessionStorage } from "../utils/session-storage.js";
 import { ActionPlanner, ActionPlan } from "./action-planner.js";
 import { SubagentManager } from "./subagent-manager.js";
 import { WorktreeManager } from "../utils/worktree-manager.js";
+import { ConfirmationService } from "../utils/confirmation-service.js";
 
 export interface ChatEntry {
   type: "user" | "assistant" | "tool_result" | "tool_call";

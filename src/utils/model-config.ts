@@ -1,4 +1,4 @@
-import { getSettingsManager, UserSettings, ProjectSettings } from './settings-manager.js';
+import { getSettingsManager } from './settings-manager.js';
 
 export interface ModelOption {
   model: string;
@@ -6,8 +6,8 @@ export interface ModelOption {
 
 export type ModelConfig = string;
 
-// Re-export interfaces for backward compatibility
-export { UserSettings, ProjectSettings };
+// Re-export interfaces for backward compatibility (type-only)
+export type { UserSettings, ProjectSettings } from './settings-manager.js';
 
 /**
  * Get the effective current model

@@ -3,6 +3,7 @@ import { useInput } from "ink";
 import { MiniMaxAgent, ChatEntry } from "../agent/minimax-agent.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 import { useEnhancedInput, Key } from "./use-enhanced-input.js";
+import { OperationMode } from "../types/index.js";
 
 import { filterCommandSuggestions, FileSuggestions } from "../ui/components/command-suggestions.js";
 import { loadModelConfig, updateCurrentModel } from "../utils/model-config.js";
@@ -201,16 +202,11 @@ export function useInputHandler({
   const [showFileSuggestions, setShowFileSuggestions] = useState(false);
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [availableFiles, setAvailableFiles] = useState<string[]>([]);
-  const [autoEditEnabled, setAutoEditEnabled] = useState(() => {
-    const confirmationService = ConfirmationService.getInstance();
-    const sessionFlags = confirmationService.getSessionFlags();
-    return sessionFlags.allOperations;
-  });
 
-  const [planModeEnabled, setPlanModeEnabled] = useState(() => {
+  // Single operation mode state - replaces separate autoEditEnabled and planModeEnabled
+  const [currentMode, setCurrentMode] = useState<OperationMode>(() => {
     const confirmationService = ConfirmationService.getInstance();
-    const sessionFlags = confirmationService.getSessionFlags();
-    return sessionFlags.planMode || false;
+    return confirmationService.getCurrentMode();
   });
 
   const handleSpecialKey = (key: Key): boolean => {
@@ -222,38 +218,11 @@ export function useInputHandler({
     // Handle shift+tab to cycle through modes: manual → plan → auto → manual
     if (key.shift && key.tab) {
       const confirmationService = ConfirmationService.getInstance();
-      const currentFlags = confirmationService.getSessionFlags();
       
-      let newMode: "manual" | "plan" | "auto";
+      // Use the ConfirmationService cycleMode method for consistent mode transitions
+      const newMode = confirmationService.cycleMode();
+      setCurrentMode(newMode);
       
-      if (currentFlags.planMode) {
-        // Currently in plan mode, switch to auto mode
-        newMode = "auto";
-      } else if (currentFlags.allOperations) {
-        // Currently in auto mode, switch to manual mode
-        newMode = "manual";
-      } else {
-        // Currently in manual mode, switch to plan mode
-        newMode = "plan";
-      }
-      
-      // Update states and confirmation service
-      if (newMode === "plan") {
-        setPlanModeEnabled(true);
-        setAutoEditEnabled(false);
-        confirmationService.setSessionFlag("planMode", true);
-        confirmationService.setSessionFlag("allOperations", false);
-      } else if (newMode === "auto") {
-        setPlanModeEnabled(false);
-        setAutoEditEnabled(true);
-        confirmationService.setSessionFlag("planMode", false);
-        confirmationService.setSessionFlag("allOperations", true);
-      } else {
-        // Manual mode
-        setPlanModeEnabled(false);
-        setAutoEditEnabled(false);
-        confirmationService.resetSession();
-      }
       return true; // Handled
     }
 
@@ -1024,7 +993,6 @@ Respond with ONLY the commit message, no additional text.`;
     commandSuggestions,
     availableModels,
     agent,
-    autoEditEnabled,
-    planModeEnabled,
+    currentMode,
   };
 }

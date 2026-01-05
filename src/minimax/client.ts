@@ -12,6 +12,7 @@ export interface MiniMaxTool {
       type: "object";
       properties: Record<string, any>;
       required: string[];
+      additionalProperties?: boolean;
     };
   };
 }

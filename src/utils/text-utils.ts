@@ -14,6 +14,14 @@ export interface TextSelection {
   end: number;
 }
 
+export interface TruncatedContent {
+  content: string;
+  isTruncated: boolean;
+  originalLength: number;
+  linesShown: number;
+  totalLines: number;
+}
+
 /**
  * Check if a character is a word boundary
  */
@@ -218,4 +226,145 @@ export function insertText(text: string, position: number, insert: string): { te
     text: newText,
     position: position + insert.length,
   };
+}
+
+/**
+ * Truncate text content for display, showing a summary with option to expand
+ */
+export function truncateContent(
+  content: string,
+  options: {
+    maxLines?: number;
+    maxLength?: number;
+    preserveWords?: boolean;
+    terminalWidth?: number;
+  } = {}
+): TruncatedContent {
+  const {
+    maxLines = 20,
+    maxLength = 2000,
+    preserveWords = true,
+    terminalWidth = 80,
+  } = options;
+
+  if (!content) {
+    return {
+      content: '',
+      isTruncated: false,
+      originalLength: 0,
+      linesShown: 0,
+      totalLines: 0,
+    };
+  }
+
+  const lines = content.split('\n');
+  const totalLines = lines.length;
+  const originalLength = content.length;
+
+  // If content is short enough, return as-is
+  if (totalLines <= maxLines && originalLength <= maxLength) {
+    return {
+      content,
+      isTruncated: false,
+      originalLength,
+      linesShown: totalLines,
+      totalLines,
+    };
+  }
+
+  let truncatedLines: string[] = [];
+  let currentLength = 0;
+  let linesShown = 0;
+
+  // Add lines until we hit limits
+  for (let i = 0; i < Math.min(maxLines, lines.length); i++) {
+    const line = lines[i];
+
+    // Check if adding this line would exceed maxLength
+    if (currentLength + line.length > maxLength && truncatedLines.length > 0) {
+      break;
+    }
+
+    truncatedLines.push(line);
+    currentLength += line.length + 1; // +1 for newline
+    linesShown++;
+
+    // If we've reached maxLength, stop
+    if (currentLength >= maxLength) {
+      break;
+    }
+  }
+
+  // If preserveWords is enabled and we truncated mid-word, adjust
+  if (preserveWords && truncatedLines.length > 0) {
+    const lastLine = truncatedLines[truncatedLines.length - 1];
+    if (currentLength >= maxLength && !isWordBoundary(lastLine[lastLine.length - 1])) {
+      // Find the last complete word
+      const lastSpaceIndex = lastLine.lastIndexOf(' ');
+      if (lastSpaceIndex > 0) {
+        truncatedLines[truncatedLines.length - 1] = lastLine.substring(0, lastSpaceIndex);
+      }
+    }
+  }
+
+  let truncatedContent = truncatedLines.join('\n');
+
+  // Add truncation indicator
+  if (linesShown < totalLines || currentLength >= maxLength) {
+    const remainingLines = totalLines - linesShown;
+    const remainingChars = Math.max(0, originalLength - currentLength);
+
+    let indicator = '\n\n';
+    if (remainingLines > 0) {
+      indicator += `... and ${remainingLines} more line${remainingLines !== 1 ? 's' : ''}`;
+    }
+    if (remainingChars > 0 && remainingLines === 0) {
+      indicator += `... and ${remainingChars} more character${remainingChars !== 1 ? 's' : ''}`;
+    }
+    indicator += ' (truncated)';
+
+    truncatedContent += indicator;
+  }
+
+  return {
+    content: truncatedContent,
+    isTruncated: linesShown < totalLines || currentLength >= maxLength,
+    originalLength,
+    linesShown,
+    totalLines,
+  };
+}
+
+/**
+ * Create a human-readable summary of content characteristics
+ */
+export function summarizeContent(content: string): string {
+  if (!content) return 'Empty content';
+
+  const lines = content.split('\n');
+  const totalLines = lines.length;
+  const totalChars = content.length;
+  const avgLineLength = totalChars / totalLines;
+
+  let summary = `${totalLines} line${totalLines !== 1 ? 's' : ''}, ${totalChars} character${totalChars !== 1 ? 's' : ''}`;
+
+  if (avgLineLength > 100) {
+    summary += ' (long lines)';
+  } else if (avgLineLength < 20) {
+    summary += ' (short lines)';
+  }
+
+  // Check for common content types
+  const firstLine = lines[0]?.toLowerCase() || '';
+  if (firstLine.includes('error') || firstLine.includes('failed')) {
+    summary += ' - appears to contain errors';
+  } else if (firstLine.includes('success') || firstLine.includes('completed')) {
+    summary += ' - appears to be successful output';
+  } else if (content.includes('diff --git') || content.includes('@@ ')) {
+    summary += ' - appears to be a diff/patch';
+  } else if (content.includes('package.json') || content.includes('node_modules')) {
+    summary += ' - appears to be Node.js related';
+  }
+
+  return summary;
 }

@@ -53,8 +53,7 @@ function ChatInterfaceWithAgent({
     availableFiles,
     commandSuggestions,
     availableModels,
-    autoEditEnabled,
-    planModeEnabled,
+    currentMode,
   } = useInputHandler({
     agent,
     chatHistory,
@@ -360,8 +359,7 @@ function ChatInterfaceWithAgent({
           <Box flexDirection="row" marginTop={1}>
             <Box marginRight={2}>
               <Text color="cyan">
-                {planModeEnabled ? "📋 plan" : autoEditEnabled ? "▶" : "⏸"} mode:{" "}
-                {planModeEnabled ? "plan" : autoEditEnabled ? "auto" : "manual"}
+                {currentMode === 'plan' ? '📋' : currentMode === 'auto' ? '▶' : '⏸'} mode: {currentMode}
               </Text>
               <Text color="gray" dimColor>
                 {" "}

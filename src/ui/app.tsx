@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import { Agent } from '../agent/index.js';
 import { ToolResult } from '../types/index.js';
 import { ConfirmationService, ConfirmationOptions } from '../utils/confirmation-service.js';
+import { truncateContent, TruncatedContent } from '../utils/text-utils.js';
 import ConfirmationDialog from './components/confirmation-dialog.js';
 import chalk from 'chalk';
 
@@ -12,9 +13,10 @@ interface Props {
 
 export default function App({ agent }: Props) {
   const [input, setInput] = useState('');
-  const [history, setHistory] = useState<Array<{ command: string; result: ToolResult }>>([]);
+  const [history, setHistory] = useState<Array<{ command: string; result: ToolResult; truncatedContent?: TruncatedContent }>>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmationOptions, setConfirmationOptions] = useState<ConfirmationOptions | null>(null);
+  const [expandedResults, setExpandedResults] = useState<Set<number>>(new Set());
   // Removed useApp().exit - using process.exit(0) instead for better terminal handling
   
   const confirmationService = ConfirmationService.getInstance();
@@ -36,6 +38,18 @@ export default function App({ agent }: Props) {
     confirmationService.resetSession();
   }, []);
 
+  const toggleResultExpansion = (index: number) => {
+    setExpandedResults(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  };
+
   useInput(async (inputChar: string, key: any) => {
     // If confirmation dialog is open, don't handle normal input
     if (confirmationOptions) {
@@ -55,9 +69,35 @@ export default function App({ agent }: Props) {
       if (input.trim()) {
         setIsProcessing(true);
         const result = await agent.processCommand(input.trim());
-        setHistory(prev => [...prev, { command: input.trim(), result }]);
+
+        // Truncate content for display
+        const truncatedContent = result.output ? truncateContent(result.output, {
+          maxLines: 15,
+          maxLength: 1500,
+          terminalWidth: process.stdout.columns || 80,
+        }) : undefined;
+
+        setHistory(prev => [...prev, {
+          command: input.trim(),
+          result,
+          truncatedContent
+        }]);
         setInput('');
         setIsProcessing(false);
+      }
+      return;
+    }
+
+    // Handle expand/collapse with 'e' key
+    if (inputChar === 'e' && !key.ctrl && !key.meta) {
+      // Find the last result that has truncated content
+      const lastEntryWithTruncation = history.slice(-10).reverse().find(entry =>
+        entry.truncatedContent?.isTruncated
+      );
+
+      if (lastEntryWithTruncation) {
+        const lastIndex = history.lastIndexOf(lastEntryWithTruncation);
+        toggleResultExpansion(lastIndex);
       }
       return;
     }
@@ -72,14 +112,39 @@ export default function App({ agent }: Props) {
     }
   });
 
-  const renderResult = (result: ToolResult) => {
+  const renderResult = (result: ToolResult, truncatedContent?: TruncatedContent, historyIndex?: number) => {
+    const isExpanded = historyIndex !== undefined && expandedResults.has(historyIndex);
+    const displayContent = isExpanded && result.output ? result.output :
+                          truncatedContent?.content || result.output || '';
+
     if (result.success) {
       return (
         <Box flexDirection="column" marginBottom={1}>
           <Text color="green">✓ Success</Text>
-          {result.output && (
-            <Box marginLeft={2}>
-              <Text>{result.output}</Text>
+          {displayContent && (
+            <Box flexDirection="column" marginLeft={2}>
+              <Text>{displayContent}</Text>
+              {truncatedContent?.isTruncated && !isExpanded && (
+                <Box marginTop={1}>
+                  <Text color="cyan" dimColor>
+                    [Truncated - {truncatedContent.totalLines - truncatedContent.linesShown} more lines,
+                    {truncatedContent.originalLength - displayContent.length} more chars]
+                    {historyIndex !== undefined && (
+                      <Text color="yellow"> Press 'e' to expand</Text>
+                    )}
+                  </Text>
+                </Box>
+              )}
+              {isExpanded && (
+                <Box marginTop={1}>
+                  <Text color="cyan" dimColor>
+                    [Full content shown]
+                    {historyIndex !== undefined && (
+                      <Text color="yellow"> Press 'e' to collapse</Text>
+                    )}
+                  </Text>
+                </Box>
+              )}
             </Box>
           )}
         </Box>
@@ -133,20 +198,23 @@ export default function App({ agent }: Props) {
           Available commands: view, str_replace, create, insert, undo_edit, bash, help
         </Text>
         <Text dimColor>
-          Type 'help' for detailed usage, 'exit' or Ctrl+C to quit
+          Type 'help' for detailed usage, 'exit' or Ctrl+C to quit, 'e' to expand/collapse results
         </Text>
       </Box>
 
       <Box flexDirection="column" marginBottom={1}>
-        {history.slice(-10).map((entry, index) => (
-          <Box key={index} flexDirection="column" marginBottom={1}>
-            <Box>
-              <Text color="blue">$ </Text>
-              <Text>{entry.command}</Text>
+        {history.slice(-10).map((entry, index) => {
+          const actualIndex = history.length - 10 + index;
+          return (
+            <Box key={index} flexDirection="column" marginBottom={1}>
+              <Box>
+                <Text color="blue">$ </Text>
+                <Text>{entry.command}</Text>
+              </Box>
+              {renderResult(entry.result, entry.truncatedContent, actualIndex)}
             </Box>
-            {renderResult(entry.result)}
-          </Box>
-        ))}
+          );
+        })}
       </Box>
 
       <Box>

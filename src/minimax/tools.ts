@@ -340,16 +340,37 @@ export async function initializeMCPServers(): Promise<void> {
 }
 
 export function convertMCPToolToMiniMaxTool(mcpTool: MCPTool): MiniMaxTool {
+  const inputSchema = mcpTool.inputSchema || {};
+  
+  // Normalize MCP schema to match MiniMax/OpenAI function calling format
+  const normalizedParameters: MiniMaxTool["function"]["parameters"] = {
+    type: "object",
+    properties: {},
+    required: []
+  };
+
+  // If inputSchema is already a proper object schema, use it directly
+  if (inputSchema.type === "object" || (!inputSchema.type && (inputSchema.properties || inputSchema.required))) {
+    normalizedParameters.properties = inputSchema.properties || {};
+    normalizedParameters.required = inputSchema.required || [];
+    
+    // Copy additional schema properties for better validation
+    if (inputSchema.additionalProperties !== undefined) {
+      normalizedParameters.additionalProperties = inputSchema.additionalProperties;
+    }
+  } else if (inputSchema.properties) {
+    // Handle case where type is missing but properties exist
+    normalizedParameters.properties = inputSchema.properties;
+    normalizedParameters.required = inputSchema.required || [];
+  }
+  // If inputSchema is empty or invalid, use default empty object schema
+
   return {
     type: "function",
     function: {
       name: mcpTool.name,
       description: mcpTool.description,
-      parameters: mcpTool.inputSchema || {
-        type: "object",
-        properties: {},
-        required: []
-      }
+      parameters: normalizedParameters
     }
   };
 }
