@@ -150,7 +150,45 @@ const MemoizedChatEntry = React.memo(
               return content;
             }
           }
-          return content;
+          
+          // Apply UI-level summarization for specific tool types
+          switch (toolName) {
+            case "view_file":
+            case "create_file":
+              // Show summary for large file contents
+              const lines = content.split("\n");
+              if (lines.length > 20) {
+                return (
+                  lines.slice(0, 10).join("\n") +
+                  `\n\n[...] ${lines.length - 20} more lines hidden [...]\n\n` +
+                  lines.slice(-10).join("\n")
+                );
+              }
+              return content;
+            
+            case "bash":
+              // Truncate long bash outputs
+              if (content.length > 500) {
+                return content.substring(0, 500) + 
+                  `\n\n[... ${content.length - 500} more characters hidden ...]`;
+              }
+              return content;
+            
+            case "search":
+              // Already handled above for MCP tools, but add extra handling here
+              try {
+                const parsed = JSON.parse(content);
+                if (Array.isArray(parsed)) {
+                  return `Found ${parsed.length} matches`;
+                }
+              } catch {
+                // Not JSON, return as is
+              }
+              return content;
+            
+            default:
+              return content;
+          }
         };
         const shouldShowDiff =
           entry.toolCall?.function?.name === "str_replace_editor" &&

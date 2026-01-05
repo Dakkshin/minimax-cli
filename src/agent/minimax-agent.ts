@@ -26,6 +26,98 @@ import { SubagentManager } from "./subagent-manager.js";
 import { WorktreeManager } from "../utils/worktree-manager.js";
 import { ConfirmationService } from "../utils/confirmation-service.js";
 
+// Configuration for context minimization
+const MAX_TOOL_RESULT_LENGTH = 2000; // Maximum characters per tool result
+const MAX_MESSAGES_TO_KEEP = 20; // Maximum number of messages to keep in history
+const MAX_TOTAL_TOKENS = 120000; // Token limit for context window management
+
+/**
+ * Truncate content to a maximum length with an indicator
+ */
+function truncateContent(
+  content: string,
+  maxLength: number = MAX_TOOL_RESULT_LENGTH
+): string {
+  if (!content) return content;
+  if (content.length <= maxLength) return content;
+  return (
+    content.substring(0, maxLength) +
+    `\n\n[Output truncated - ${content.length - maxLength} characters hidden]`
+  );
+}
+
+/**
+ * Summarize file content by showing first and last portions for large files
+ */
+function summarizeFileContent(
+  content: string,
+  maxLines: number = 50
+): string {
+  if (!content) return content;
+  const lines = content.split("\n");
+  if (lines.length <= maxLines) return content;
+
+  const keepFromStart = Math.floor(maxLines / 2);
+  const keepFromEnd = maxLines - keepFromStart;
+
+  return (
+    lines.slice(0, keepFromStart).join("\n") +
+    `\n\n[... ${lines.length - maxLines} lines hidden ...]\n\n` +
+    lines.slice(-keepFromEnd).join("\n")
+  );
+}
+
+/**
+ * Summarize search results to show only match count and key files
+ */
+function summarizeSearchResults(output: string): string {
+  // If it's a search result JSON, extract key info
+  if (output.includes('"file_path"') || output.includes('"content"')) {
+    try {
+      const parsed = JSON.parse(output);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const summary = parsed.slice(0, 5).map((item: any) => {
+          if (typeof item === "object" && item.file_path) {
+            return `  - ${item.file_path}${
+              item.line_number ? `:${item.line_number}` : ""
+            }${item.match_text ? ` → "${item.match_text.substring(0, 50)}..."` : ""}`;
+          }
+          return `  - ${JSON.stringify(item).substring(0, 80)}`;
+        });
+        const hidden = parsed.length > 5 ? `\n  ... and ${parsed.length - 5} more results` : "";
+        return `Found ${parsed.length} matches:${summary.join("\n")}${hidden}`;
+      }
+    } catch {
+      // Not valid JSON, return original
+    }
+  }
+  return output;
+}
+
+/**
+ * Detect content type and apply appropriate summarization
+ */
+function summarizeToolOutput(
+  toolName: string,
+  output: string
+): string {
+  switch (toolName) {
+    case "view_file":
+    case "create_file":
+      return summarizeFileContent(output, 50);
+
+    case "search":
+      return summarizeSearchResults(output);
+
+    case "bash":
+      // For bash commands, truncate long outputs
+      return truncateContent(output, MAX_TOOL_RESULT_LENGTH);
+
+    default:
+      return truncateContent(output, MAX_TOOL_RESULT_LENGTH);
+  }
+}
+
 export interface ChatEntry {
   type: "user" | "assistant" | "tool_result" | "tool_call";
   content: string;
@@ -345,14 +437,22 @@ Current working directory: ${process.cwd()}`,
             }
 
             // Add tool result to messages with proper format (needed for AI context)
+            // Apply context minimization to tool outputs
+            const toolName = toolCall.function.name;
+            const rawContent = result.success
+              ? result.output || "Success"
+              : result.error || "Error";
+            const minimizedContent = summarizeToolOutput(toolName, rawContent);
+
             this.messages.push({
               role: "tool",
-              content: result.success
-                ? result.output || "Success"
-                : result.error || "Error",
+              content: minimizedContent,
               tool_call_id: toolCall.id,
             });
           }
+
+          // Manage context window to prevent unbounded growth
+          this.manageContextWindow();
 
           // Get next response - this might contain more tool calls
           currentResponse = await this.miniMaxClient.chat(
@@ -660,14 +760,25 @@ Current working directory: ${process.cwd()}`,
             };
 
             // Add tool result with proper format (needed for AI context)
+            // Apply context minimization to tool outputs
+            const streamingToolName = toolCall.function.name;
+            const streamingRawContent = result.success
+              ? result.output || "Success"
+              : result.error || "Error";
+            const streamingMinimizedContent = summarizeToolOutput(
+              streamingToolName,
+              streamingRawContent
+            );
+
             this.messages.push({
               role: "tool",
-              content: result.success
-                ? result.output || "Success"
-                : result.error || "Error",
+              content: streamingMinimizedContent,
               tool_call_id: toolCall.id,
             });
           }
+
+          // Manage context window to prevent unbounded growth
+          this.manageContextWindow();
 
           // Update token count after processing all tool calls to include tool results
           inputTokens = this.tokenCounter.countMessageTokens(
@@ -836,6 +947,31 @@ Current working directory: ${process.cwd()}`,
         success: false,
         error: `MCP tool execution error: ${error.message}`,
       };
+    }
+  }
+
+  /**
+   * Manage context window by pruning old messages when limits are reached
+   * This ensures the conversation history doesn't grow unbounded
+   */
+  private manageContextWindow(): void {
+    const currentTokens = this.tokenCounter.countMessageTokens(
+      this.messages as any
+    );
+
+    // Check if we need to prune
+    if (
+      currentTokens > MAX_TOTAL_TOKENS ||
+      this.messages.length > MAX_MESSAGES_TO_KEEP * 2
+    ) {
+      // Always keep the system message (first message)
+      const systemMessage = this.messages[0];
+
+      // Keep the last N messages
+      const recentMessages = this.messages.slice(-MAX_MESSAGES_TO_KEEP);
+
+      // Rebuild messages array: system message + recent messages
+      this.messages = [systemMessage, ...recentMessages];
     }
   }
 
