@@ -2,7 +2,7 @@
 
 A conversational AI CLI tool powered by MiniMax with intelligent text editor capabilities and tool usage.
 
-<img width="980" height="435" alt="Screenshot 2025-07-21 at 13 35 41" src="minimax-cli.png" />
+<img width="980" height="435" alt="Screenshot 2025-07-21 at 13 35 41" src="minimax.gif" />
 
 ## Features
 
