@@ -14,8 +14,8 @@ import {
   TodoTool,
   ConfirmationTool,
   SearchTool,
-  WebSearchTool,
 } from "../tools/index.js";
+import { web_search } from "../tools/web-search.js";
 import { ToolResult } from "../types/index.js";
 import { EventEmitter } from "events";
 import { createTokenCounter, TokenCounter } from "../utils/token-counter.js";
@@ -146,7 +146,6 @@ export class MiniMaxAgent extends EventEmitter {
   private todoTool: TodoTool;
   private confirmationTool: ConfirmationTool;
   private search: SearchTool;
-  private webSearch: WebSearchTool;
   private sessionStorage: SessionStorage;
   private actionPlanner: ActionPlanner;
   private subagentManager: SubagentManager;
@@ -176,7 +175,6 @@ export class MiniMaxAgent extends EventEmitter {
     this.todoTool = new TodoTool();
     this.confirmationTool = new ConfirmationTool();
     this.search = new SearchTool();
-    this.webSearch = new WebSearchTool();
     this.tokenCounter = createTokenCounter(modelToUse);
 
     // Initialize session storage
@@ -897,12 +895,36 @@ Current working directory: ${process.cwd()}`,
           });
 
         case "web_search":
-          return await this.webSearch.search(args.query, {
-            maxResults: args.max_results,
-            language: args.language,
-            timeRange: args.time_range,
-            safeSearch: args.safe_search,
+          const searchResults = await web_search({
+            query: args.query,
+            top_k: args.top_k || 5,
+            fetch_pages: args.fetch_pages || false,
           });
+
+          // Convert results to readable string format for LLM
+          if (searchResults.length > 0) {
+            const formattedOutput = searchResults
+              .map((result, index: number) => {
+                return `Result ${index + 1}:
+Title: ${result.title}
+Link: ${result.link}
+Snippet: ${result.snippet.trim()}`;
+              })
+              .join('\n---\n');
+
+            return {
+              success: true,
+              output: `Web Search Results for "${args.query}":\n\n${formattedOutput}`,
+              data: { results: searchResults, query: args.query },
+            };
+          } else {
+            return {
+              success: false,
+              error: 'No search results found',
+              output: `Search for "${args.query}" returned no results`,
+              data: { results: searchResults, query: args.query },
+            };
+          }
 
         default:
           // Check if this is an MCP tool

@@ -1,7 +1,7 @@
 import { MiniMaxTool } from "./client.js";
 import { MCPManager, MCPTool } from "../mcp/client.js";
 import { loadMCPConfig } from "../mcp/config.js";
-import { webSearch } from "../tools/web-search.js";
+import { web_search } from "../tools/web-search.js";
 
 const BASE_MINIMAX_TOOLS: MiniMaxTool[] = [
   {
@@ -164,27 +164,21 @@ const BASE_MINIMAX_TOOLS: MiniMaxTool[] = [
     type: "function",
     function: {
       name: "web_search",
-      description:
-        "Search the web using SearxNG for real-time information, news, and current events. Returns top results with title, URL, and content snippets.",
+      description: "Free web search using DuckDuckGo HTML scraping. Returns structured results with title, link, and snippet for each result.",
       parameters: {
         type: "object",
         properties: {
           query: {
             type: "string",
-            description: "Search query for web search",
+            description: "Search query",
           },
-          max_results: {
+          top_k: {
             type: "number",
-            description: "Maximum number of results to return (default: 5)",
+            description: "Number of top results to return (default: 5)",
           },
-          language: {
-            type: "string",
-            description: "Language code for search results (default: 'en')",
-          },
-          time_range: {
-            type: "string",
-            enum: ["day", "week", "month", "year"],
-            description: "Filter results by time range",
+          fetch_pages: {
+            type: "boolean",
+            description: "Fetch and extract content from top result pages for higher quality answers (default: false)",
           },
         },
         required: ["query"],

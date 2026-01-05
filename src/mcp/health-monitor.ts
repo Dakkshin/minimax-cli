@@ -75,9 +75,7 @@ export class MCPHealthMonitor extends EventEmitter {
           version: "1.0.0"
         },
         {
-          capabilities: {
-            tools: {}
-          }
+          capabilities: {}
         }
       );
       // Note: Client connection setup would require transport layer

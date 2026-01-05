@@ -1,25 +1,144 @@
 /**
  * Web Search Tool for MiniMax CLI
- * Uses public SearxNG instances for real-time web search capabilities
+ * Uses DuckDuckGo HTML search scraping (free, no API keys required)
  */
 
-import axios, { AxiosInstance } from 'axios';
+import * as cheerio from 'cheerio';
 
 export interface WebSearchResult {
   title: string;
-  url: string;
-  content: string;
-  engine?: string;
-  category?: string;
+  link: string;
+  snippet: string;
 }
 
 export interface WebSearchOptions {
-  maxResults?: number;
-  language?: string;
-  timeRange?: 'day' | 'week' | 'month' | 'year';
-  safeSearch?: boolean;
+  query: string;
+  top_k?: number;
+  fetch_pages?: boolean; // Fetch top result pages for better quality
 }
 
+/**
+ * Free web search using DuckDuckGo HTML scraping
+ * @param options - Search options
+ * @returns Promise<WebSearchResult[]>
+ */
+export async function web_search({
+  query,
+  top_k = 5,
+  fetch_pages = false
+}: WebSearchOptions): Promise<WebSearchResult[]> {
+  const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+
+  try {
+    // Add safety throttle to prevent IP blocking
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`DuckDuckGo search failed: ${response.status}`);
+    }
+
+    const html = await response.text();
+    const $ = cheerio.load(html);
+
+    const results: WebSearchResult[] = [];
+
+    $('.result').each((i, el) => {
+      if (i >= top_k) return;
+
+      const title = $(el).find('.result__title a').text().trim();
+      const link = $(el).find('.result__url').attr('href') || $(el).find('.result__title a').attr('href');
+      const snippet = $(el).find('.result__snippet').text().trim();
+
+      if (title && link && snippet) {
+        results.push({
+          title,
+          link: normalizeUrl(link),
+          snippet,
+        });
+      }
+    });
+
+    // Optional: Fetch top result pages for better quality
+    if (fetch_pages && results.length > 0) {
+      const topResults = results.slice(0, 2); // Fetch top 1-2 results
+      for (const result of topResults) {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 500)); // Additional throttle
+          const pageResponse = await fetch(result.link, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            },
+          });
+
+          if (pageResponse.ok) {
+            const pageHtml = await pageResponse.text();
+            const page$ = cheerio.load(pageHtml);
+
+            // Extract text from <p> tags (simple content extraction)
+            const paragraphs = page$('p').map((_, el) => page$(el).text().trim()).get();
+            const pageContent = paragraphs.slice(0, 5).join(' ').substring(0, 1000); // ~1k tokens
+
+            if (pageContent) {
+              result.snippet = pageContent;
+            }
+          }
+        } catch (error) {
+          console.log(`Failed to fetch page content for ${result.link}: ${error}`);
+          // Keep original snippet if page fetch fails
+        }
+      }
+    }
+
+    return results;
+  } catch (error) {
+    console.error(`Web search error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return [];
+  }
+}
+
+/**
+ * Normalize URLs from DuckDuckGo results
+ */
+function normalizeUrl(url: string): string {
+  if (!url) return '';
+
+  // Handle DuckDuckGo redirect URLs
+  if (url.startsWith('/l/?uddg=')) {
+    try {
+      return decodeURIComponent(url.substring(8));
+    } catch {
+      return url;
+    }
+  }
+
+  // Handle relative URLs
+  if (url.startsWith('//')) {
+    return 'https:' + url;
+  }
+
+  // Return as-is if it's already a full URL
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+
+  return url;
+}
+
+/**
+ * Legacy interface for backward compatibility
+ */
 export interface WebSearchResponse {
   success: boolean;
   query: string;
@@ -27,167 +146,8 @@ export interface WebSearchResponse {
   error?: string;
 }
 
-// Public SearxNG instances (free, no API key required)
-const SEARXNG_INSTANCES = [
-  'https://searx.be',
-  'https://searx.org',
-  'https://searxng.site',
-  'https://search.bus.gy',
-];
-
-export class WebSearchTool {
-  private client: AxiosInstance;
-  private instance: string;
-  private maxRetries: number = 2;
-
-  constructor(instance?: string) {
-    this.instance = instance || SEARXNG_INSTANCES[0];
-    this.client = axios.create({
-      baseURL: `${this.instance}`,
-      timeout: 10000,
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'MiniMax-CLI/1.0 (Research tool)',
-      },
-    });
-  }
-
-  /**
-   * Search the web using SearxNG
-   * @param query - Search query string
-   * @param options - Optional search parameters
-   * @returns Promise<WebSearchResponse>
-   */
-  async search(query: string, options: WebSearchOptions = {}): Promise<WebSearchResponse> {
-    const {
-      maxResults = 5,
-      language = 'en',
-      timeRange,
-      safeSearch = true,
-    } = options;
-
-    try {
-      // Build search parameters for SearxNG
-      const params: Record<string, string | number | boolean> = {
-        q: query,
-        format: 'json',
-        language: language,
-        safe_search: safeSearch ? 1 : 0,
-        categories: 'general',
-        pageno: 1,
-      };
-
-      if (timeRange) {
-        params.time_range = timeRange;
-      }
-
-      // Make the request
-      const response = await this.client.get('/', { params });
-      
-      if (response.status !== 200) {
-        throw new Error(`Search failed with status: ${response.status}`);
-      }
-
-      const data = response.data;
-      
-      // Parse and format results
-      const results = this.parseResults(data, maxResults);
-      
-      return {
-        success: true,
-        query,
-        results,
-      };
-    } catch (error) {
-      // Try fallback instances if primary fails
-      if (this.maxRetries > 0) {
-        this.maxRetries--;
-        return this.tryFallbackInstance(query, options);
-      }
-
-      return {
-        success: false,
-        query,
-        results: [],
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
-    }
-  }
-
-  /**
-   * Parse SearxNG JSON response into structured results
-   */
-  private parseResults(data: any, maxResults: number): WebSearchResult[] {
-    const results: WebSearchResult[] = [];
-    
-    if (!data.results || !Array.isArray(data.results)) {
-      return results;
-    }
-
-    for (const item of data.results.slice(0, maxResults)) {
-      results.push({
-        title: item.title || 'No title',
-        url: item.url || item.link || '#',
-        content: item.content || item.description || '',
-        engine: item.engine || 'searxng',
-        category: item.category || 'general',
-      });
-    }
-
-    return results;
-  }
-
-  /**
-   * Try fallback SearxNG instances
-   */
-  private async tryFallbackInstance(
-    query: string,
-    options: WebSearchOptions
-  ): Promise<WebSearchResponse> {
-    const remainingInstances = SEARXNG_INSTANCES.filter(
-      (inst) => inst !== this.instance
-    );
-
-    for (const instance of remainingInstances) {
-      try {
-        const fallbackTool = new WebSearchTool(instance);
-        const result = await fallbackTool.search(query, options);
-        
-        if (result.success) {
-          return result;
-        }
-      } catch {
-        // Continue to next fallback
-        continue;
-      }
-    }
-
-    return {
-      success: false,
-      query,
-      results: [],
-      error: 'All search instances failed',
-    };
-  }
-
-  /**
-   * Check if search service is available
-   */
-  async healthCheck(): Promise<boolean> {
-    try {
-      await this.client.get('/', { 
-        params: { q: 'test', format: 'json' },
-        timeout: 5000 
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-}
-
 /**
- * Convenience function for quick web searches
+ * Convenience function for quick web searches (legacy interface)
  * @param query - Search query
  * @param maxResults - Number of results to return (default: 5)
  */
@@ -195,18 +155,23 @@ export async function webSearch(
   query: string,
   maxResults: number = 5
 ): Promise<WebSearchResponse> {
-  const tool = new WebSearchTool();
-  return tool.search(query, { maxResults });
+  const results = await web_search({ query, top_k: maxResults });
+
+  return {
+    success: results.length > 0,
+    query,
+    results,
+  };
 }
 
 /**
  * Factory function to create a configured search tool
  */
-export function createWebSearchTool(
-  instance?: string,
-  defaultOptions?: WebSearchOptions
-): WebSearchTool {
-  return new WebSearchTool(instance);
+export function createWebSearchTool() {
+  return {
+    web_search,
+    webSearch,
+  };
 }
 
-export default WebSearchTool;
+export default web_search;
