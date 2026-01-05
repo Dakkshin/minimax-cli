@@ -14,6 +14,7 @@ import {
   TodoTool,
   ConfirmationTool,
   SearchTool,
+  WebSearchTool,
 } from "../tools/index.js";
 import { ToolResult } from "../types/index.js";
 import { EventEmitter } from "events";
@@ -145,6 +146,7 @@ export class MiniMaxAgent extends EventEmitter {
   private todoTool: TodoTool;
   private confirmationTool: ConfirmationTool;
   private search: SearchTool;
+  private webSearch: WebSearchTool;
   private sessionStorage: SessionStorage;
   private actionPlanner: ActionPlanner;
   private subagentManager: SubagentManager;
@@ -174,6 +176,7 @@ export class MiniMaxAgent extends EventEmitter {
     this.todoTool = new TodoTool();
     this.confirmationTool = new ConfirmationTool();
     this.search = new SearchTool();
+    this.webSearch = new WebSearchTool();
     this.tokenCounter = createTokenCounter(modelToUse);
 
     // Initialize session storage
@@ -891,6 +894,14 @@ Current working directory: ${process.cwd()}`,
             maxResults: args.max_results,
             fileTypes: args.file_types,
             includeHidden: args.include_hidden,
+          });
+
+        case "web_search":
+          return await this.webSearch.search(args.query, {
+            maxResults: args.max_results,
+            language: args.language,
+            timeRange: args.time_range,
+            safeSearch: args.safe_search,
           });
 
         default:

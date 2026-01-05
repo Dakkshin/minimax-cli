@@ -87,10 +87,10 @@ function ChatInterfaceWithAgent({
     const logoOutput = cfonts.render("MINIMAX", {
       font: "block",
       align: "left",
-      colors: ["#B4393C", "#5f7794"],
+      colors: ["#E52175", "#FB5942"],
       space: true,
       maxLength: "0",
-      gradient: ["#B4393C", "#5f7794"],
+      gradient: ["#E52175", "#FB5942"],
       independentGradient: false,
       transitionGradient: true,
       env: "node",
@@ -297,20 +297,23 @@ function ChatInterfaceWithAgent({
       {chatHistory.length === 0 && !confirmationOptions && (
         <Box flexDirection="column" marginBottom={2}>
           <Text color="cyan" bold>
-            Tips for getting started:
+          Welcome to MiniMax 🚀
+          </Text>
+          <Text color="cyan" bold>
+          Your smart CLI sidekick - here’s how to make it do cool stuff:
           </Text>
           <Box marginTop={1} flexDirection="column">
             <Text color="gray">
-              1. Ask questions, edit files, or run commands.
+              1. Ask it anything - questions, commands, or ideas. Don’t hold back.
             </Text>
-            <Text color="gray">2. Be specific for the best results.</Text>
+            <Text color="gray">2. Tweak files on the fly - edit, update, or create new ones effortlessly.</Text>
             <Text color="gray">
-              3. Create MINIMAX.md files to customize your interactions with MiniMax.
+              3. Personalize your MiniMax - create MINIMAX.md to shape how it works for you.
             </Text>
             <Text color="gray">
-              4. Press Shift+Tab to cycle through modes: manual → plan → auto → manual
+              4. Switch modes like a pro - Shift+Tab cycles manual ↔ plan ↔ auto.
             </Text>
-            <Text color="gray">5. /help for more information.</Text>
+            <Text color="gray">5. Need help? – type /help anytime for a quick guide.</Text>
           </Box>
         </Box>
       )}
