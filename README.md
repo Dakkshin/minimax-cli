@@ -14,7 +14,16 @@ A conversational AI CLI tool powered by MiniMax with intelligent text editor cap
 - **🚀 Morph Fast Apply**: Optional high-speed code editing at 4,500+ tokens/sec with 98% accuracy
 - **🔌 MCP Tools**: Extend capabilities with Model Context Protocol servers (Linear, GitHub, etc.)
 - **💬 Interactive UI**: Beautiful terminal interface built with Ink
-- **🌍 Global Installation**: Install and use anywhere with `bun add -g @vibe-kit/minimax-cli`
+- **🌍 Global Installation**: Install and use anywhere with `bun add -g minimax-cli`
+
+## Licensing
+
+This software uses a dual licensing model:
+
+- **Open Source Use**: Licensed under AGPL-3.0 for individual developers, researchers, and non-commercial projects
+- **Commercial Use**: Requires a commercial license for business use, redistribution, or deployment in commercial products
+
+See [LICENSE.md](LICENSE.md) for detailed licensing information.
 
 ## Installation
 
@@ -25,12 +34,12 @@ A conversational AI CLI tool powered by MiniMax with intelligent text editor cap
 
 ### Global Installation (Recommended)
 ```bash
-bun add -g @vibe-kit/minimax-cli
+bun add -g minimax-cli
 ```
 
 Or with npm (fallback):
 ```bash
-npm install -g @vibe-kit/minimax-cli
+npm install -g minimax-cli
 ```
 
 ### Local Development
@@ -493,4 +502,9 @@ bun run typecheck
 
 ## License
 
-MIT
+This software uses a dual licensing model:
+
+- **Open Source Use**: Licensed under GNU AGPL-3.0 for individual developers, researchers, and non-commercial projects
+- **Commercial Use**: Requires a commercial license for business use, redistribution, or deployment in commercial products
+
+See [LICENSE.md](LICENSE.md) for detailed licensing information.

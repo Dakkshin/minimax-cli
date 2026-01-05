@@ -1,5 +1,5 @@
 {
-  "name": "@vibe-kit/minimax-cli",
+  "name": "minimax-cli",
   "version": "0.0.1",
   "description": "An open-source AI agent that brings the power of MiniMax directly into your terminal.",
   "type": "module",
@@ -32,7 +32,14 @@
     "ai"
   ],
   "author": "Dakkshin",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE.md",
+    "LICENSE-AGPL.md",
+    "LICENSE-COMMERCIAL.md"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.0",
     "axios": "^1.7.0",
