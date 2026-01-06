@@ -522,6 +522,9 @@ Current working directory: ${process.cwd()}`,
             for (const toolCall of acc[key]) {
               if (toolCall.index !== undefined) {
                 toolCallsByIndex[toolCall.index] = toolCall;
+              } else {
+                // Tool call without index (e.g., id chunk) - store as-is
+                toolCallsByIndex[Object.keys(toolCallsByIndex).length] = toolCall;
               }
             }
             acc[key] = toolCallsByIndex;
@@ -537,8 +540,19 @@ Current working directory: ${process.cwd()}`,
               if (!acc[key][index]) {
                 acc[key][index] = { ...toolCall };
               } else {
-                // Merge the tool call with existing one at this index
+                // Merge the tool call with existing one at this index, preserving id
+                const existingId = acc[key][index]?.id;
                 acc[key][index] = reduce(acc[key][index], toolCall);
+                // Ensure id is preserved after merge
+                if (existingId && !acc[key][index]?.id) {
+                  acc[key][index].id = existingId;
+                }
+              }
+            } else if (toolCall.id) {
+              // Tool call chunk with id but no index - find by id or append
+              const existingIndex = Object.values(acc[key]).findIndex((tc: any) => tc?.id === toolCall.id);
+              if (existingIndex !== -1) {
+                acc[key][existingIndex] = reduce(acc[key][existingIndex], toolCall);
               }
             }
           }
@@ -873,7 +887,7 @@ Current working directory: ${process.cwd()}`,
           );
 
         case "bash":
-          return await this.bash.execute(args.command);
+          return await this.bash.execute(args.command, 30000, this.abortController?.signal);
 
         case "create_todo_list":
           return await this.todoTool.createTodoList(args.todos);
@@ -1017,7 +1031,7 @@ Snippet: ${result.snippet.trim()}`;
   }
 
   async executeBashCommand(command: string): Promise<ToolResult> {
-    return await this.bash.execute(command);
+    return await this.bash.execute(command, 30000, this.abortController?.signal);
   }
 
   getCurrentModel(): string {

@@ -54,7 +54,7 @@ export class MiniMaxClient {
   constructor(apiKey: string, model?: string, baseURL?: string) {
     this.client = new OpenAI({
       apiKey,
-      baseURL: baseURL || process.env.MINIMAX_BASE_URL || "https://api.minimax.chat/v1",
+      baseURL: baseURL || process.env.MINIMAX_BASE_URL || "https://api.minimax.io/anthropic",
       timeout: 360000,
     });
     const envMax = Number(process.env.MINIMAX_MAX_TOKENS);
@@ -88,11 +88,6 @@ export class MiniMaxClient {
         max_tokens: this.defaultMaxTokens,
       };
 
-      // Add search parameters if specified
-      if (searchOptions?.search_parameters) {
-        requestPayload.search_parameters = searchOptions.search_parameters;
-      }
-
       const response =
         await this.client.chat.completions.create(requestPayload);
 
@@ -118,11 +113,6 @@ export class MiniMaxClient {
         max_tokens: this.defaultMaxTokens,
         stream: true,
       };
-
-      // Add search parameters if specified
-      if (searchOptions?.search_parameters) {
-        requestPayload.search_parameters = searchOptions.search_parameters;
-      }
 
       const stream = (await this.client.chat.completions.create(
         requestPayload
